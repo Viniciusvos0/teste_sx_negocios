@@ -1,138 +1,91 @@
 import pandas as pd
-
-# Iniciando - Bloco 1 - Carregando e Limpando os dados
-
-# Definindo o caminho do arquivo original
-file_path = r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DADOS\MICRODADOS_ENEM_2020.csv"
-
-# Definindo as colunas a serem mantidas
-columns_to_keep = [
-    "NU_INSCRICAO",
-    "TP_FAIXA_ETARIA",
-    "TP_SEXO",
-    "TP_COR_RACA",
-    "TP_ST_CONCLUSAO",
-    "TP_ESCOLA",
-    "TP_PRESENCA_CN",
-    "TP_PRESENCA_CH",
-    "TP_PRESENCA_LC",
-    "TP_PRESENCA_MT",
-    "NU_NOTA_CN",
-    "NU_NOTA_CH",
-    "NU_NOTA_LC",
-    "NU_NOTA_MT",
-    "NU_NOTA_COMP1",
-    "NU_NOTA_COMP2",
-    "NU_NOTA_COMP3",
-    "NU_NOTA_COMP4",
-    "NU_NOTA_COMP5",
-    "NU_NOTA_REDACAO",
-    "Q006",
-    "Q025",
-]
-
-# Inicializando o objeto para salvar o arquivo final
-output_file_path = r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DADOS\MICRODADOS_ENEM_2020_reduzido.csv"
-
-# Configurando a leitura do arquivo em pedaços
-chunk_size = 50000  # Definindo o tamanho do pedaço (pode ser ajustado dependendo da memória disponível)
-chunks = pd.read_csv(file_path, delimiter=";", encoding="latin1", chunksize=chunk_size)
-
-# Criando um arquivo vazio para salvar os resultados finais
-is_first_chunk = True
-for chunk in chunks:
-    # Limpando espaços nas colunas
-    chunk.columns = chunk.columns.str.strip()
-
-    # Filtrando as colunas necessárias
-    chunk_reduced = chunk[columns_to_keep]
-
-    # Salvando o pedaço no arquivo
-    if is_first_chunk:
-        chunk_reduced.to_csv(
-            output_file_path, index=False, mode="w"
-        )  # Modo 'w' para criar o arquivo
-        is_first_chunk = False
-    else:
-        chunk_reduced.to_csv(
-            output_file_path, index=False, mode="a", header=False
-        )  # Modo 'a' para adicionar ao arquivo existente
-
-print(f"Arquivo reduzido salvo em: {output_file_path}")
-
-# Finalizando - Bloco 1 - Carregando e Limpando os dados
-
-
-# Iniciando - Bloco 2 - Calculando e transformando
-
-# Definindo o caminho do arquivo
-file_path = r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DADOS\MICRODADOS_ENEM_2020_reduzido.csv"
-
-# Tentando ler o arquivo com delimitador padrão (vírgula)
-df = pd.read_csv(file_path, encoding="latin1")
-
-# Imprimindo os nomes das colunas para verificar se estão corretos
-print("Nomes das colunas no arquivo CSV:")
-print(df.columns)
-
-# Seguindo com a soma e a média
-# Calculando a média das colunas especificadas
-df["NU_NOTA_FINAL"] = (
-    df[["NU_NOTA_CN", "NU_NOTA_CH", "NU_NOTA_LC", "NU_NOTA_MT", "NU_NOTA_REDACAO"]].sum(
-        axis=1
-    )
-    / 5
-)
-
-# Salvando o DataFrame atualizado de volta no arquivo CSV
-output_file_path = r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DADOS\MICRODADOS_ENEM_2020_com_media.csv"
-df.to_csv(output_file_path, index=False)
-
-# Imprimindo as primeiras 10 linhas do DataFrame
-print(df.head(10))
-
-print(f"Arquivo atualizado com a coluna NU_NOTA_FINAL salvo em: {output_file_path}")
-
-# Finalizando - Bloco 2 - Calculando e transformando
-
-# Iniciando - Bloco 3 - Enviando para o Banco de Dados
-
 from sqlalchemy import create_engine
-import pandas as pd
+from pyspark.sql import SparkSession
+import os
+import sys
+import glob
 
-# Definindo configurações de conexão
+
+#Após criar o arquivo yml e o container no docker com docker-compose up -d,
+# sigo com o código para fazer o ETL e posteriormente subir o df para o container
+
+
+# Definindo o Python para o PySpark
+os.environ['PYSPARK_PYTHON'] = sys.executable
+os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
+
+# Definindo os diretórios do Spark e Hadoop
+os.environ['SPARK_HOME'] = r"C:\spark\spark-3.5.3-bin-hadoop3"
+os.environ['HADOOP_HOME'] = r"C:\hadoop"
+
+# Configuração do SparkSession
+spark = SparkSession.builder \
+    .appName("sx_teste_PySpark") \
+    .config("spark.hadoop.fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem") \
+    .config("spark.hadoop.io.native.lib", "false") \
+    .config("spark.sql.warehouse.dir", "C:\\spark\\spark-3.5.3-bin-hadoop3\\spark-warehouse") \
+    .getOrCreate()
+
+# Início do bloco (Leitura e carregamento do arquivo CSV com PySpark)
+file_path = r"C:\Users\vinic\OneDrive\Área de Trabalho\case_sx_negocios\DADOS\MICRODADOS_ENEM_2020.csv"
+df = spark.read.option("delimiter", ";").csv(file_path, header=True, inferSchema=True)
+# Fim do bloco (Leitura e carregamento do arquivo CSV)
+
+# Início do bloco (Limpeza das colunas)
+colunas_necessarias = [
+    "NU_INSCRICAO", "TP_FAIXA_ETARIA", "TP_SEXO", "TP_COR_RACA", "TP_ST_CONCLUSAO", 
+    "TP_ESCOLA", "TP_PRESENCA_CN", "TP_PRESENCA_CH", "TP_PRESENCA_LC", "TP_PRESENCA_MT", 
+    "NU_NOTA_CN", "NU_NOTA_CH", "NU_NOTA_LC", "NU_NOTA_MT", "NU_NOTA_COMP1", "NU_NOTA_COMP2", 
+    "NU_NOTA_COMP3", "NU_NOTA_COMP4", "NU_NOTA_COMP5", "NU_NOTA_REDACAO", "Q006", "Q025"
+]
+df_limpo = df.select(colunas_necessarias)
+# Fim do bloco (Limpeza das colunas)
+
+# Início do bloco (Cálculo da média das notas)
+df_com_media = df_limpo.withColumn(
+    "MEDIA_NOTA", 
+    (df_limpo["NU_NOTA_CN"] + df_limpo["NU_NOTA_CH"] + df_limpo["NU_NOTA_LC"] + 
+     df_limpo["NU_NOTA_MT"] + df_limpo["NU_NOTA_REDACAO"]) / 5
+)
+# Fim do bloco (Cálculo da média das notas)
+
+# Início do bloco (Conversão para float)
+df_com_media = df_com_media.withColumn("NU_NOTA_CN", df_com_media["NU_NOTA_CN"].cast("float"))
+df_com_media = df_com_media.withColumn("NU_NOTA_CH", df_com_media["NU_NOTA_CH"].cast("float"))
+df_com_media = df_com_media.withColumn("NU_NOTA_LC", df_com_media["NU_NOTA_LC"].cast("float"))
+df_com_media = df_com_media.withColumn("NU_NOTA_MT", df_com_media["NU_NOTA_MT"].cast("float"))
+df_com_media = df_com_media.withColumn("NU_NOTA_REDACAO", df_com_media["NU_NOTA_REDACAO"].cast("float"))
+df_com_media = df_com_media.withColumn("MEDIA_NOTA", df_com_media["MEDIA_NOTA"].cast("float"))
+# Fim do bloco (Conversão para float)
+
+# Início do bloco (Salvamento do arquivo CSV limpo)
+output_path = r"C:\Users\vinic\OneDrive\Área de Trabalho\case_sx_negocios\DADOS\MICRODADOS_ENEM_2020_T.csv"
+# Escrevendo o arquivo com o separador de vírgula
+df_com_media.coalesce(1).write.option("header", "true").option("delimiter", ";").csv(output_path)
+# Fim do bloco (Salvamento do arquivo CSV limpo)
+
+
+# Início do bloco (Carregar CSV com pandas e enviar para MySQL)
+# Usando glob para pegar todos os arquivos que começam com part-*.csv
+csv_files = glob.glob(output_path + '/part-*.csv')
+
+# Lendo todos os arquivos CSV com pandas e concatenando em um único DataFrame
+df_pandas = pd.concat([pd.read_csv(f, delimiter=',') for f in csv_files], ignore_index=True)
+
+# Definindo configurações de conexão com o MySQL
 user = "vinicius"
 password = "1234root"  # Certificando-se de que esta é a senha correta
-host = "172.18.0.1"  # Definindo o IP correto do MySQL no Docker
-port = "3306"
+host = "172.17.0.2"  # Definindo o IP correto do MySQL no Docker
+port = "3307"  # Definindo a porta do MySQL no contêiner
 database = "prova_enem"  # Certificando-se de que o banco existe
 
+# Montando a URL de conexão
+mysql_url = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}"
+
 # Criando o motor de conexão
-engine = create_engine(f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}")
+engine = create_engine(mysql_url)
 
-# Definindo o dicionário com os caminhos dos arquivos e os nomes das tabelas
-files_and_tables = {
-    "MICRODADOS_ENEM_2020_com_media": r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DADOS\MICRODADOS_ENEM_2020_com_media.csv",
-    "acesso_a_internet": r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DIM\acesso_a_internet.csv",
-    "etnia": r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DIM\etnia.csv",
-    "faixa_etaria": r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DIM\faixa_etaria.csv",
-    "presenca": r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DIM\presenca.csv",
-    "redacao": r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DIM\redacao.csv",
-    "renda": r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DIM\renda.csv",
-    "sexo": r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DIM\sexo.csv",
-    "tp_escola": r"C:\Users\vinic\OneDrive\Área de Trabalho\Case SX Negócios\DIM\tp_escola.csv",
-}
 
-# Iterando pelos arquivos e carregando-os no banco de dados
-for table_name, file_path in files_and_tables.items():
-    print(f"Carregando {table_name}...")
-
-    # Lendo o CSV
-    df = pd.read_csv(file_path)
-
-    # Enviando para o MySQL
-    df.to_sql(table_name, con=engine, if_exists="replace", index=False)
-
-    print(f"Tabela {table_name} carregada com sucesso.")
-
-# Finalizando - Bloco 3 - Enviando para o Banco de Dados
+# Subindo os dados para o MySQL
+df_pandas.to_sql('MICRODADOS_ENEM_2020', con=engine, if_exists='replace', index=False)
+# Fim do bloco (Carregar CSV com pandas e enviar para MySQL)
